@@ -1,0 +1,15 @@
+.avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: white;
+  user-select: none;
+}
+
+.avatar-placeholder {
+  text-transform: uppercase;
+}
