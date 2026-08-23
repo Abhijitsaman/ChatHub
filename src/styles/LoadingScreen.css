@@ -1,0 +1,45 @@
+.loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #0a0a0f;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.loading-logo {
+  width: 80px;
+  height: 80px;
+}
+
+.loading-logo-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.loading-spinner {
+  color: #818cf8;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  color: #94a3b8;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
