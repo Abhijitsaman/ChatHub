@@ -9,6 +9,12 @@ export const conversationService = {
     return `conv_${sorted.join('_')}`;
   },
 
+  async getConversation(conversationId) {
+    const convRef = ref(db, `conversations/${conversationId}`);
+    const snapshot = await get(convRef);
+    return snapshot.val();
+  },
+
   async getOrCreateConversation(userId1, userId2) {
     const conversationId = this.getConversationId(userId1, userId2);
     const convRef = ref(db, `conversations/${conversationId}`);
