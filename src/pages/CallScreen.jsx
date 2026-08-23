@@ -42,27 +42,26 @@ function CallScreen() {
 
     const initializeCall = async () => {
       try {
-        // Load callee profile
         const profile = await userService.getUserProfile(calleeId);
         setCallee(profile);
 
-        // Create or get call
-        const existingCall = isCaller ? null : await callService.getCall(callId);
         let newCallId;
-        
         if (isCaller) {
           newCallId = await callService.createCall(user.uid, calleeId, type);
           setCallId(newCallId);
-        } else if (existingCall) {
-          newCallId = callId;
-          setCallId(newCallId);
+        } else {
+          const callData = await callService.getCall(callId);
+          if (callData) {
+            newCallId = callId;
+            setCallId(newCallId);
+          } else {
+            throw new Error('Call not found');
+          }
         }
 
-        // Initialize WebRTC
         const webrtc = new WebRTCService();
         webrtcRef.current = webrtc;
 
-        // Set up callbacks
         webrtc.onLocalStream = (stream) => {
           setLocalStream(stream);
           if (localVideoRef.current) {
@@ -96,24 +95,20 @@ function CallScreen() {
           }
         };
 
-        // Set up signaling
         if (isCaller) {
-          await webrtc.initiateCall(newCallId);
+          await webrtc.initiateCall(newCallId, type === 'video');
         } else {
-          // Wait for offer
           const unsubscribe = callService.listenCall(newCallId, async (callData) => {
             if (callData?.offer && !webrtc.answered) {
               await webrtc.handleOffer(newCallId, JSON.parse(callData.offer));
             }
           });
           
-          // Cleanup on unmount
           return () => {
             if (unsubscribe) unsubscribe();
           };
         }
 
-        // Start timer
         timerRef.current = setInterval(() => {
           setDuration(prev => prev + 1);
         }, 1000);
@@ -122,7 +117,7 @@ function CallScreen() {
 
       } catch (err) {
         console.error('Call initialization error:', err);
-        setError('Unable to start call');
+        setError(err.message || 'Unable to start call');
         setStatus('failed');
       }
     };
