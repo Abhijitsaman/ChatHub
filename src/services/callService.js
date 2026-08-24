@@ -1,13 +1,16 @@
 import { db } from '../firebase/config';
-import { ref, get, set, update, remove, push, onValue, off, serverTimestamp } from 'firebase/database';
+import {
+  doc, getDoc, setDoc, updateDoc, deleteDoc, collection,
+  addDoc, getDocs, onSnapshot, query, where
+} from 'firebase/firestore';
 import { FirebaseService } from './firebaseService';
 
 export const callService = {
   async createCall(callerId, calleeId, type) {
     const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const callRef = ref(db, `calls/${callId}`);
-    
-    await set(callRef, {
+    const callRef = doc(db, 'calls', callId);
+
+    await setDoc(callRef, {
       callerId,
       calleeId,
       type,
@@ -15,13 +18,12 @@ export const callService = {
       createdAt: FirebaseService.getTimestamp(),
       updatedAt: FirebaseService.getTimestamp(),
     });
-    
+
     return callId;
   },
 
   async acceptCall(callId) {
-    const callRef = ref(db, `calls/${callId}`);
-    await update(callRef, {
+    await updateDoc(doc(db, 'calls', callId), {
       status: 'connected',
       acceptedAt: FirebaseService.getTimestamp(),
       updatedAt: FirebaseService.getTimestamp(),
@@ -29,8 +31,7 @@ export const callService = {
   },
 
   async rejectCall(callId) {
-    const callRef = ref(db, `calls/${callId}`);
-    await update(callRef, {
+    await updateDoc(doc(db, 'calls', callId), {
       status: 'rejected',
       endedAt: FirebaseService.getTimestamp(),
       updatedAt: FirebaseService.getTimestamp(),
@@ -38,8 +39,7 @@ export const callService = {
   },
 
   async endCall(callId) {
-    const callRef = ref(db, `calls/${callId}`);
-    await update(callRef, {
+    await updateDoc(doc(db, 'calls', callId), {
       status: 'ended',
       endedAt: FirebaseService.getTimestamp(),
       updatedAt: FirebaseService.getTimestamp(),
@@ -47,84 +47,61 @@ export const callService = {
   },
 
   async setOffer(callId, offer) {
-    const callRef = ref(db, `calls/${callId}`);
-    await update(callRef, {
+    await updateDoc(doc(db, 'calls', callId), {
       offer: JSON.stringify(offer),
       updatedAt: FirebaseService.getTimestamp(),
     });
   },
 
   async setAnswer(callId, answer) {
-    const callRef = ref(db, `calls/${callId}`);
-    await update(callRef, {
+    await updateDoc(doc(db, 'calls', callId), {
       answer: JSON.stringify(answer),
       updatedAt: FirebaseService.getTimestamp(),
     });
   },
 
   async addIceCandidate(callId, candidate) {
-    const candidatesRef = ref(db, `calls/${callId}/candidates`);
-    const newCandidateRef = push(candidatesRef);
-    await set(newCandidateRef, {
+    const candidatesRef = collection(db, 'calls', callId, 'candidates');
+    await addDoc(candidatesRef, {
       candidate: JSON.stringify(candidate),
       timestamp: FirebaseService.getTimestamp(),
     });
   },
 
   async getIceCandidates(callId) {
-    const candidatesRef = ref(db, `calls/${callId}/candidates`);
-    const snapshot = await get(candidatesRef);
-    if (!snapshot.exists()) return [];
-    const candidates = snapshot.val();
-    return Object.values(candidates).map(c => JSON.parse(c.candidate));
+    const candidatesRef = collection(db, 'calls', callId, 'candidates');
+    const snapshot = await getDocs(candidatesRef);
+    return snapshot.docs.map(d => JSON.parse(d.data().candidate));
   },
 
   listenCall(callId, callback) {
-    const callRef = ref(db, `calls/${callId}`);
-    return onValue(callRef, (snapshot) => {
-      callback(snapshot.val());
+    return onSnapshot(doc(db, 'calls', callId), (snapshot) => {
+      callback(snapshot.exists() ? snapshot.data() : null);
     });
   },
 
   listenCandidates(callId, callback) {
-    const candidatesRef = ref(db, `calls/${callId}/candidates`);
-    return onValue(candidatesRef, (snapshot) => {
-      const candidates = snapshot.val();
-      if (!candidates) {
-        callback([]);
-        return;
-      }
-      const candidateList = Object.values(candidates).map(c => JSON.parse(c.candidate));
+    const candidatesRef = collection(db, 'calls', callId, 'candidates');
+    return onSnapshot(candidatesRef, (snapshot) => {
+      const candidateList = snapshot.docs.map(d => JSON.parse(d.data().candidate));
       callback(candidateList);
     });
   },
 
   async getCall(callId) {
-    const callRef = ref(db, `calls/${callId}`);
-    const snapshot = await get(callRef);
-    return snapshot.val();
+    const snapshot = await getDoc(doc(db, 'calls', callId));
+    return snapshot.exists() ? snapshot.data() : null;
   },
 
   async cleanupCall(callId) {
-    const callRef = ref(db, `calls/${callId}`);
-    await remove(callRef);
+    await deleteDoc(doc(db, 'calls', callId));
   },
 
   listenIncomingCalls(userId, callback) {
-    const callsRef = ref(db, 'calls');
-    return onValue(callsRef, (snapshot) => {
-      const calls = snapshot.val();
-      if (!calls) {
-        callback([]);
-        return;
-      }
-      
-      const incomingCalls = [];
-      for (const [callId, call] of Object.entries(calls)) {
-        if (call.calleeId === userId && call.status === 'calling') {
-          incomingCalls.push({ id: callId, ...call });
-        }
-      }
+    const callsRef = collection(db, 'calls');
+    const q = query(callsRef, where('calleeId', '==', userId), where('status', '==', 'calling'));
+    return onSnapshot(q, (snapshot) => {
+      const incomingCalls = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       callback(incomingCalls);
     });
   },
