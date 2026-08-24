@@ -121,11 +121,27 @@ export const callService = {
     const q = query(callsRef, where('calleeId', '==', userId), where('status', '==', 'calling'));
     return onSnapshot(q, (snapshot) => {
       const now = Date.now();
-      const incomingCalls = snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        // Ignore stale calls older than 45 seconds — prevents "phantom" calls
-        .filter(call => !call.createdAtMs || (now - call.createdAtMs) < 45000);
-      callback(incomingCalls);
+      const freshCalls = [];
+
+      snapshot.docs.forEach((d) => {
+        const call = { id: d.id, ...d.data() };
+        const isFresh = call.createdAtMs && (now - call.createdAtMs) < 45000;
+
+        if (isFresh) {
+          freshCalls.push(call);
+        } else {
+          // Old / phantom call doc (created before this fix, or genuinely stale
+          // because nobody answered/rejected it in time).
+          // Self-heal: mark it ended so it stops showing up forever, instead
+          // of requiring a manual delete in the Firestore console.
+          updateDoc(d.ref, {
+            status: 'ended',
+            endedAt: FirebaseService.getTimestamp(),
+          }).catch(() => {});
+        }
+      });
+
+      callback(freshCalls);
     });
   },
 };
