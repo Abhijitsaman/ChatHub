@@ -6,7 +6,25 @@ import {
 import { FirebaseService } from './firebaseService';
 
 export const callService = {
+  async endStaleCalls(userA, userB) {
+    const callsRef = collection(db, 'calls');
+    const q1 = query(callsRef, where('callerId', '==', userA), where('calleeId', '==', userB), where('status', '==', 'calling'));
+    const q2 = query(callsRef, where('callerId', '==', userB), where('calleeId', '==', userA), where('status', '==', 'calling'));
+
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+    const staleDocs = [...snap1.docs, ...snap2.docs];
+
+    await Promise.all(
+      staleDocs.map((d) =>
+        updateDoc(d.ref, { status: 'ended', endedAt: FirebaseService.getTimestamp() })
+      )
+    );
+  },
+
   async createCall(callerId, calleeId, type) {
+    // Clean up any leftover "calling" documents between these two users first
+    await this.endStaleCalls(callerId, calleeId);
+
     const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const callRef = doc(db, 'calls', callId);
 
@@ -15,6 +33,7 @@ export const callService = {
       calleeId,
       type,
       status: 'calling',
+      createdAtMs: Date.now(),
       createdAt: FirebaseService.getTimestamp(),
       updatedAt: FirebaseService.getTimestamp(),
     });
@@ -101,7 +120,11 @@ export const callService = {
     const callsRef = collection(db, 'calls');
     const q = query(callsRef, where('calleeId', '==', userId), where('status', '==', 'calling'));
     return onSnapshot(q, (snapshot) => {
-      const incomingCalls = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const now = Date.now();
+      const incomingCalls = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        // Ignore stale calls older than 45 seconds — prevents "phantom" calls
+        .filter(call => !call.createdAtMs || (now - call.createdAtMs) < 45000);
       callback(incomingCalls);
     });
   },
