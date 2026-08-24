@@ -1,30 +1,28 @@
 import { db } from '../firebase/config';
-import { ref, get, set, remove, update } from 'firebase/database';
-import { FirebaseService } from './firebaseService';
+import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 
 export const blockService = {
   async blockUser(blockerId, blockedId) {
-    const blockRef = ref(db, `blocks/${blockerId}/${blockedId}`);
-    await set(blockRef, true);
+    const blockRef = doc(db, 'blocks', blockerId);
+    await setDoc(blockRef, { [blockedId]: true }, { merge: true });
   },
 
   async unblockUser(blockerId, blockedId) {
-    const blockRef = ref(db, `blocks/${blockerId}/${blockedId}`);
-    await remove(blockRef);
+    const blockRef = doc(db, 'blocks', blockerId);
+    await updateDoc(blockRef, { [blockedId]: deleteField() });
   },
 
   async isBlocked(blockerId, blockedId) {
-    const blockRef = ref(db, `blocks/${blockerId}/${blockedId}`);
-    const snapshot = await get(blockRef);
-    return snapshot.exists();
+    const blockRef = doc(db, 'blocks', blockerId);
+    const snapshot = await getDoc(blockRef);
+    return snapshot.exists() && snapshot.data()[blockedId] === true;
   },
 
   async getBlockedUsers(userId) {
-    const blocksRef = ref(db, `blocks/${userId}`);
-    const snapshot = await get(blocksRef);
+    const blockRef = doc(db, 'blocks', userId);
+    const snapshot = await getDoc(blockRef);
     if (!snapshot.exists()) return [];
-    const blocks = snapshot.val();
-    return Object.keys(blocks);
+    return Object.keys(snapshot.data());
   },
 
   async checkAnyBlock(userId1, userId2) {
