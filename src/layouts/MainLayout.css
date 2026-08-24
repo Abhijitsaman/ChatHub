@@ -1,0 +1,234 @@
+.main-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--bg-primary);
+  position: relative;
+}
+
+.main-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  padding-bottom: 68px;
+}
+
+.main-content.chat-open {
+  padding-bottom: 0;
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: 6px 0 calc(6px + var(--safe-bottom));
+  z-index: 100;
+  height: 68px;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  transition: all 0.2s;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-item svg {
+  transition: all 0.2s;
+}
+
+.nav-item.active {
+  color: var(--brand-primary);
+}
+
+.nav-item.active svg {
+  transform: scale(1.05);
+}
+
+.nav-item:active {
+  transform: scale(0.92);
+}
+
+.nav-item.logout-btn {
+  color: var(--text-muted);
+}
+
+.nav-item.logout-btn:active {
+  color: #f87171;
+}
+
+.logout-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.logout-confirm {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px 24px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  animation: slideUp 0.25s ease;
+}
+
+.logout-confirm h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.logout-confirm p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.logout-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.logout-actions button {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.logout-cancel {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+}
+
+.logout-cancel:hover {
+  background: var(--bg-surface-hover);
+}
+
+.logout-confirm-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.logout-confirm-btn:hover {
+  background: #dc2626;
+}
+
+.incoming-call-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.incoming-call-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px 24px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  animation: slideUp 0.25s ease;
+}
+
+.incoming-call-card h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 16px 0 4px;
+  color: var(--text-primary);
+}
+
+.incoming-call-card p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.incoming-call-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.incoming-call-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: transform 0.2s;
+}
+
+.incoming-call-btn:active {
+  transform: scale(0.92);
+}
+
+.incoming-call-btn.accept {
+  background: #22c55e;
+}
+
+.incoming-call-btn.reject {
+  background: #ef4444;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 768px) {
+  .main-content {
+    padding-bottom: 0;
+  }
+  
+  .bottom-nav {
+    display: none;
+  }
+}
