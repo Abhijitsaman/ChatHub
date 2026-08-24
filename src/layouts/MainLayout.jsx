@@ -1,234 +1,174 @@
-.main-layout {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
-  background: var(--bg-primary);
-  position: relative;
+import React, { useState, useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { callService } from '../services/callService';
+import { userService } from '../services/userService';
+import { MessageCircle, Search, User, QrCode, LogOut, Phone, PhoneOff, Video } from 'lucide-react';
+import Avatar from '../components/Avatar';
+import '../styles/MainLayout.css';
+
+function MainLayout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [incomingCaller, setIncomingCaller] = useState(null);
+
+  const navItems = [
+    { icon: MessageCircle, label: 'Chats', path: '/chats' },
+    { icon: Search, label: 'Search', path: '/search' },
+    { icon: User, label: 'Profile', path: '/profile' },
+    { icon: QrCode, label: 'QR', path: '/qr' },
+  ];
+
+  // Listen for incoming calls anywhere in the app
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = callService.listenIncomingCalls(user.uid, async (calls) => {
+      if (calls.length === 0) {
+        setIncomingCall(null);
+        setIncomingCaller(null);
+        return;
+      }
+
+      // Ignore if we are already on a call screen
+      if (location.pathname.startsWith('/call')) return;
+
+      const call = calls[0];
+      setIncomingCall(call);
+
+      try {
+        const profile = await userService.getUserProfile(call.callerId);
+        setIncomingCaller(profile);
+      } catch (err) {
+        console.error('Load caller profile error:', err);
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user, location.pathname]);
+
+  const handleAcceptCall = async () => {
+    if (!incomingCall) return;
+    const call = incomingCall;
+    setIncomingCall(null);
+    setIncomingCaller(null);
+
+    await callService.acceptCall(call.id);
+
+    navigate(`/call/${call.id}`, {
+      state: {
+        callId: call.id,
+        calleeId: user.uid,
+        callerId: call.callerId,
+        type: call.type,
+      },
+    });
+  };
+
+  const handleRejectCall = async () => {
+    if (!incomingCall) return;
+    const call = incomingCall;
+    setIncomingCall(null);
+    setIncomingCaller(null);
+    await callService.rejectCall(call.id);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const isActive = (path) => {
+    if (path === '/chats' && location.pathname === '/') return true;
+    if (path === '/chats' && location.pathname === '/chats') return true;
+    if (path === '/chat' && location.pathname.startsWith('/chat')) return true;
+    return location.pathname === path;
+  };
+
+  const isChatOpen = location.pathname.startsWith('/chat');
+
+  return (
+    <div className="main-layout">
+      <div className={`main-content ${isChatOpen ? 'chat-open' : ''}`}>
+        <Outlet />
+      </div>
+      
+      <nav className="bottom-nav">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.path);
+          return (
+            <button
+              key={item.path}
+              className={`nav-item ${active ? 'active' : ''}`}
+              onClick={() => navigate(item.path)}
+              aria-label={item.label}
+            >
+              <Icon size={24} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+        
+        <button
+          className="nav-item logout-btn"
+          onClick={() => setShowLogoutConfirm(true)}
+          aria-label="Logout"
+        >
+          <LogOut size={24} />
+          <span>Logout</span>
+        </button>
+      </nav>
+
+      {showLogoutConfirm && (
+        <div className="logout-overlay" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="logout-confirm" onClick={(e) => e.stopPropagation()}>
+            <h3>Logout?</h3>
+            <p>Are you sure you want to sign out?</p>
+            <div className="logout-actions">
+              <button className="logout-cancel" onClick={() => setShowLogoutConfirm(false)}>
+                Cancel
+              </button>
+              <button className="logout-confirm-btn" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {incomingCall && (
+        <div className="incoming-call-overlay">
+          <div className="incoming-call-card">
+            <Avatar
+              src={incomingCaller?.photoURL}
+              name={incomingCaller?.displayName || 'User'}
+              size={72}
+            />
+            <h3>{incomingCaller?.displayName || 'Unknown'}</h3>
+            <p>{incomingCall.type === 'video' ? 'Incoming video call...' : 'Incoming voice call...'}</p>
+            <div className="incoming-call-actions">
+              <button className="incoming-call-btn reject" onClick={handleRejectCall}>
+                <PhoneOff size={24} />
+              </button>
+              <button className="incoming-call-btn accept" onClick={handleAcceptCall}>
+                {incomingCall.type === 'video' ? <Video size={24} /> : <Phone size={24} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
-.main-content {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  padding-bottom: 68px;
-}
-
-.main-content.chat-open {
-  padding-bottom: 0;
-}
-
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  padding: 6px 0 calc(6px + var(--safe-bottom));
-  z-index: 100;
-  height: 68px;
-  padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-}
-
-.nav-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 4px 0;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 500;
-  transition: all 0.2s;
-  position: relative;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.nav-item svg {
-  transition: all 0.2s;
-}
-
-.nav-item.active {
-  color: var(--brand-primary);
-}
-
-.nav-item.active svg {
-  transform: scale(1.05);
-}
-
-.nav-item:active {
-  transform: scale(0.92);
-}
-
-.nav-item.logout-btn {
-  color: var(--text-muted);
-}
-
-.nav-item.logout-btn:active {
-  color: #f87171;
-}
-
-.logout-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-  padding: 20px;
-  animation: fadeIn 0.2s ease;
-}
-
-.logout-confirm {
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  padding: 32px 24px 24px;
-  max-width: 340px;
-  width: 100%;
-  text-align: center;
-  animation: slideUp 0.25s ease;
-}
-
-.logout-confirm h3 {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: var(--text-primary);
-}
-
-.logout-confirm p {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 24px;
-}
-
-.logout-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.logout-actions button {
-  flex: 1;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.logout-cancel {
-  background: var(--bg-input);
-  color: var(--text-secondary);
-}
-
-.logout-cancel:hover {
-  background: var(--bg-surface-hover);
-}
-
-.logout-confirm-btn {
-  background: #ef4444;
-  color: white;
-}
-
-.logout-confirm-btn:hover {
-  background: #dc2626;
-}
-
-.incoming-call-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 300;
-  padding: 20px;
-  animation: fadeIn 0.2s ease;
-}
-
-.incoming-call-card {
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  padding: 32px 24px 24px;
-  max-width: 340px;
-  width: 100%;
-  text-align: center;
-  animation: slideUp 0.25s ease;
-}
-
-.incoming-call-card h3 {
-  font-size: 20px;
-  font-weight: 600;
-  margin: 16px 0 4px;
-  color: var(--text-primary);
-}
-
-.incoming-call-card p {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 24px;
-}
-
-.incoming-call-actions {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-}
-
-.incoming-call-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  transition: transform 0.2s;
-}
-
-.incoming-call-btn:active {
-  transform: scale(0.92);
-}
-
-.incoming-call-btn.accept {
-  background: #22c55e;
-}
-
-.incoming-call-btn.reject {
-  background: #ef4444;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (min-width: 768px) {
-  .main-content {
-    padding-bottom: 0;
-  }
-  
-  .bottom-nav {
-    display: none;
-  }
-}
+export default MainLayout;
