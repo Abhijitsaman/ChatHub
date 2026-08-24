@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { userService } from '../services/userService';
 import { conversationService } from '../services/conversationService';
-import { QrReader } from 'react-qr-reader';
+import { QrScanner } from '@yudiel/react-qr-scanner';
 import Avatar from '../components/Avatar';
 import { ArrowLeft, Camera, X, Loader2, UserPlus } from 'lucide-react';
 import '../styles/QRScannerScreen.css';
@@ -18,7 +18,6 @@ function QRScannerScreen() {
   const [scannedUser, setScannedUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
-  const [torchOn, setTorchOn] = useState(false);
   const scannerRef = useRef(null);
 
   useEffect(() => {
@@ -34,7 +33,16 @@ function QRScannerScreen() {
       });
 
     return () => {
+      // Cleanup scanner ref
       if (scannerRef.current) {
+        try {
+          const stream = scannerRef.current.getStream();
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        } catch (err) {
+          // Ignore cleanup errors
+        }
         scannerRef.current = null;
       }
     };
@@ -217,26 +225,34 @@ function QRScannerScreen() {
       </div>
 
       <div className="qr-scanner-container">
-        <QrReader
+        <QrScanner
           ref={scannerRef}
-          onResult={handleScan}
+          onDecode={handleScan}
           onError={handleError}
           constraints={{
             facingMode: 'environment',
           }}
-          videoStyle={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
+          styles={{
+            container: {
+              width: '100%',
+              height: '100%',
+            },
+            video: {
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            },
           }}
-          ViewFinder={() => (
-            <div className="qr-viewfinder">
-              <div className="qr-viewfinder-corner tl"></div>
-              <div className="qr-viewfinder-corner tr"></div>
-              <div className="qr-viewfinder-corner bl"></div>
-              <div className="qr-viewfinder-corner br"></div>
-            </div>
-          )}
+          components={{
+            finder: (
+              <div className="qr-viewfinder">
+                <div className="qr-viewfinder-corner tl"></div>
+                <div className="qr-viewfinder-corner tr"></div>
+                <div className="qr-viewfinder-corner bl"></div>
+                <div className="qr-viewfinder-corner br"></div>
+              </div>
+            ),
+          }}
         />
         
         <div className="qr-scanner-overlay">
