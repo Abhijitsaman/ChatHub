@@ -21,19 +21,31 @@ function QRScannerScreen() {
   const scannerRef = useRef(null);
 
   useEffect(() => {
-    // Check camera permission
+    let permissionStream = null;
+    let cancelled = false;
+
+    // Just checking whether permission exists — release the stream immediately
+    // so the actual QrScanner component below can open its own camera stream
+    // without the camera being reported as "busy".
     navigator.mediaDevices
       .getUserMedia({ video: true })
-      .then(() => {
-        setHasPermission(true);
+      .then((stream) => {
+        permissionStream = stream;
+        stream.getTracks().forEach((track) => track.stop());
+        if (!cancelled) setHasPermission(true);
       })
       .catch(() => {
-        setHasPermission(false);
-        setError('Camera access denied. Please allow camera access in your browser settings.');
+        if (!cancelled) {
+          setHasPermission(false);
+          setError('Camera access denied. Please allow camera access in your browser settings.');
+        }
       });
 
     return () => {
-      // Cleanup scanner ref
+      cancelled = true;
+      if (permissionStream) {
+        permissionStream.getTracks().forEach((track) => track.stop());
+      }
       if (scannerRef.current) {
         try {
           const stream = scannerRef.current.getStream();
