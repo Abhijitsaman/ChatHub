@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { callService } from '../services/callService';
 import { userService } from '../services/userService';
 import { WebRTCService } from '../services/webrtcService';
 import Avatar from '../components/Avatar';
 import { 
-  Phone, PhoneOff, Mic, MicOff, Video, VideoOff, 
-  X, Loader2, ArrowLeft
+  PhoneOff, Mic, MicOff, Video, VideoOff, ArrowLeft
 } from 'lucide-react';
 import '../styles/CallScreen.css';
 
@@ -15,22 +14,22 @@ function CallScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { calleeId, type, callerId } = location.state || {};
+  const params = useParams();
+  const { calleeId, type, callerId, callId: stateCallId } = location.state || {};
 
-  const [callId, setCallId] = useState(null);
+  const [callId, setCallId] = useState(stateCallId || null);
   const [callee, setCallee] = useState(null);
   const [status, setStatus] = useState('connecting');
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
   const [error, setError] = useState(null);
 
   const webrtcRef = useRef(null);
   const timerRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const initializedRef = useRef(false);
 
   const isCaller = callerId === user?.uid;
 
@@ -40,37 +39,28 @@ function CallScreen() {
       return;
     }
 
+    // Guard against double-initialization (e.g. React StrictMode / re-renders)
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    let unsubscribeCall = null;
+    let unsubscribeCandidates = null;
+
     const initializeCall = async () => {
       try {
         const profile = await userService.getUserProfile(calleeId);
         setCallee(profile);
 
-        let newCallId;
-        if (isCaller) {
-          newCallId = await callService.createCall(user.uid, calleeId, type);
-          setCallId(newCallId);
-        } else {
-          const callData = await callService.getCall(callId);
-          if (callData) {
-            newCallId = callId;
-            setCallId(newCallId);
-          } else {
-            throw new Error('Call not found');
-          }
-        }
-
         const webrtc = new WebRTCService();
         webrtcRef.current = webrtc;
 
         webrtc.onLocalStream = (stream) => {
-          setLocalStream(stream);
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
           }
         };
 
         webrtc.onRemoteStream = (stream) => {
-          setRemoteStream(stream);
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = stream;
           }
@@ -78,42 +68,64 @@ function CallScreen() {
         };
 
         webrtc.onIceConnectionStateChange = (state) => {
+          if (state === 'connected') {
+            setStatus('connected');
+          }
           if (state === 'disconnected' || state === 'failed') {
             setError('Connection lost');
             setStatus('failed');
           }
         };
 
-        webrtc.onTrack = (event) => {
-          const stream = event.streams[0];
-          if (stream) {
-            setRemoteStream(stream);
-            if (remoteVideoRef.current) {
-              remoteVideoRef.current.srcObject = stream;
-            }
-            setStatus('connected');
-          }
-        };
-
         if (isCaller) {
+          // Caller creates a fresh call document
+          const newCallId = await callService.createCall(user.uid, calleeId, type);
+          setCallId(newCallId);
+
           await webrtc.initiateCall(newCallId, type === 'video');
-        } else {
-          const unsubscribe = callService.listenCall(newCallId, async (callData) => {
-            if (callData?.offer && !webrtc.answered) {
-              await webrtc.handleOffer(newCallId, JSON.parse(callData.offer));
+
+          // Watch for status changes (rejected/ended by other side)
+          unsubscribeCall = callService.listenCall(newCallId, (callData) => {
+            if (callData?.status === 'rejected') {
+              setError('Call declined');
+              setStatus('failed');
+            }
+            if (callData?.status === 'ended') {
+              navigate('/chats');
             }
           });
-          
-          return () => {
-            if (unsubscribe) unsubscribe();
-          };
+
+          setStatus('calling');
+        } else {
+          // Callee: we already have the real callId (from the incoming-call listener)
+          if (!stateCallId) {
+            throw new Error('Call information missing');
+          }
+
+          const existingCall = await callService.getCall(stateCallId);
+          if (!existingCall) {
+            throw new Error('Call not found');
+          }
+
+          if (existingCall.offer) {
+            await webrtc.handleOffer(stateCallId, JSON.parse(existingCall.offer));
+          }
+
+          unsubscribeCall = callService.listenCall(stateCallId, async (callData) => {
+            if (callData?.status === 'ended') {
+              navigate('/chats');
+            }
+            if (callData?.offer && !webrtc.answered) {
+              await webrtc.handleOffer(stateCallId, JSON.parse(callData.offer));
+            }
+          });
+
+          setStatus('calling');
         }
 
         timerRef.current = setInterval(() => {
-          setDuration(prev => prev + 1);
+          setDuration((prev) => prev + 1);
         }, 1000);
-
-        setStatus('calling');
 
       } catch (err) {
         console.error('Call initialization error:', err);
@@ -125,30 +137,20 @@ function CallScreen() {
     initializeCall();
 
     return () => {
+      if (unsubscribeCall) unsubscribeCall();
+      if (unsubscribeCandidates) unsubscribeCandidates();
       cleanupCall();
     };
-  }, [user, calleeId, type, isCaller, callId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, calleeId]);
 
   const cleanupCall = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    
     if (webrtcRef.current) {
       webrtcRef.current.cleanup();
-    }
-    
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-    }
-    
-    if (remoteStream) {
-      remoteStream.getTracks().forEach(track => track.stop());
-    }
-
-    if (callId) {
-      callService.endCall(callId).catch(() => {});
     }
   };
 
@@ -204,8 +206,8 @@ function CallScreen() {
         <div className="call-header-info">
           <span className="call-header-name">{callee?.displayName || 'User'}</span>
           <span className="call-header-status">
-            {status === 'connected' ? formatDuration(duration) : 
-             status === 'calling' ? 'Calling...' : 
+            {status === 'connected' ? formatDuration(duration) :
+             status === 'calling' ? 'Calling...' :
              status === 'connecting' ? 'Connecting...' : status}
           </span>
         </div>
@@ -214,19 +216,8 @@ function CallScreen() {
       <div className="call-video-container">
         {type === 'video' ? (
           <>
-            <video
-              ref={remoteVideoRef}
-              className="call-remote-video"
-              autoPlay
-              playsInline
-            />
-            <video
-              ref={localVideoRef}
-              className="call-local-video"
-              autoPlay
-              playsInline
-              muted
-            />
+            <video ref={remoteVideoRef} className="call-remote-video" autoPlay playsInline />
+            <video ref={localVideoRef} className="call-local-video" autoPlay playsInline muted />
           </>
         ) : (
           <div className="call-audio-avatar">
@@ -236,7 +227,7 @@ function CallScreen() {
       </div>
 
       <div className="call-controls">
-        <button 
+        <button
           className={`call-control-btn ${isMuted ? 'active' : ''}`}
           onClick={handleToggleMute}
         >
@@ -244,7 +235,7 @@ function CallScreen() {
         </button>
 
         {type === 'video' && (
-          <button 
+          <button
             className={`call-control-btn ${isVideoOff ? 'active' : ''}`}
             onClick={handleToggleVideo}
           >
