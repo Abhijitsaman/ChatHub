@@ -2,12 +2,15 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-primary);
   position: relative;
+  overflow: hidden;
 }
 
 .main-content {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   padding-bottom: 68px;
@@ -139,30 +142,19 @@
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (min-width: 768px) {
   .main-content {
     padding-bottom: 0;
   }
-  
   .bottom-nav {
     display: none;
   }
