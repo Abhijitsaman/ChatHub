@@ -29,9 +29,17 @@ function MessageInfo({ messageId, conversationId, onClose }) {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [messageId, conversationId, onClose]);
 
-  const formatDateTime = (timestamp) => {
+  const toJsDate = (timestamp) => {
     if (!timestamp) return null;
-    const date = new Date(timestamp);
+    const date = typeof timestamp.toDate === 'function'
+      ? timestamp.toDate()
+      : new Date(timestamp);
+    return isNaN(date.getTime()) ? null : date;
+  };
+
+  const formatDateTime = (timestamp) => {
+    const date = toJsDate(timestamp);
+    if (!date) return null;
     return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
