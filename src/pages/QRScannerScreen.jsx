@@ -27,9 +27,11 @@ function QRScannerScreen() {
     setError(null);
 
     try {
-      const text = result.text;
-      let data;
+      // @yudiel/react-qr-scanner এর onDecode সরাসরি স্ট্রিং রিটার্ন করে,
+      // { text } object না। তাই দুটো ক্ষেত্রেই কাজ করার জন্য এই চেক।
+      const text = typeof result === 'string' ? result : result?.text;
 
+      let data;
       try {
         data = JSON.parse(text);
       } catch {
