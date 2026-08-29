@@ -253,3 +253,48 @@
     transform: rotate(360deg);
   }
 }
+.settings-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.settings-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-elevated);
+  transition: 0.3s;
+  border-radius: var(--radius-full);
+}
+
+.settings-toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.settings-toggle-switch input:checked + .settings-toggle-slider {
+  background-color: var(--brand-primary);
+}
+
+.settings-toggle-switch input:checked + .settings-toggle-slider::before {
+  transform: translateX(20px);
+}
