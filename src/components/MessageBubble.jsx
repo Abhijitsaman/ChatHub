@@ -6,19 +6,27 @@ import '../styles/MessageBubble.css';
 function MessageBubble({ message, isOwn, onLongPress, onInfo, isDeleted }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
 
+  const toJsDate = (timestamp) => {
+    if (!timestamp) return null;
+    const date = typeof timestamp.toDate === 'function'
+      ? timestamp.toDate()
+      : new Date(timestamp);
+    return isNaN(date.getTime()) ? null : date;
+  };
+
   const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    const date = toJsDate(timestamp);
+    if (!date) return '';
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
   const getStatusIcon = () => {
     if (isDeleted) return null;
     if (!isOwn) return null;
-    
+
     if (message.status === 'seen') {
       return <Eye size={14} className="status-icon seen" />;
     }
