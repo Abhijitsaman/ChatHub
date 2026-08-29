@@ -4,13 +4,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { userService } from '../services/userService';
 import { blockService } from '../services/blockService';
 import Avatar from '../components/Avatar';
-import { ArrowLeft, User, Shield, Bell, Users, Info, LogOut, Edit2, Check, X } from 'lucide-react';
+import { ArrowLeft, User, Shield, Bell, Users, Info, LogOut, Edit2, Check, X, Moon } from 'lucide-react';
 import '../styles/SettingsScreen.css';
 
 function SettingsScreen() {
-  const { user, logout } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const navigate = useNavigate();
-  
+
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -19,6 +19,7 @@ function SettingsScreen() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [blockedUsers, setBlockedUsers] = useState([]);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -28,7 +29,8 @@ function SettingsScreen() {
         setProfile(profileData);
         setDisplayName(profileData.displayName || '');
         setBio(profileData.bio || '');
-        
+        setDarkMode(!!profileData.darkMode);
+
         const blocked = await blockService.getBlockedUsers(user.uid);
         setBlockedUsers(blocked);
       } catch (err) {
@@ -43,7 +45,7 @@ function SettingsScreen() {
   const handleUpdateProfile = async () => {
     setError(null);
     setSuccess(null);
-    
+
     if (!displayName.trim()) {
       setError('Display name is required');
       return;
@@ -54,16 +56,33 @@ function SettingsScreen() {
         displayName: displayName.trim(),
         bio: bio.trim(),
       });
-      
+
       const updatedProfile = await userService.getUserProfile(user.uid);
       setProfile(updatedProfile);
       setSuccess('Profile updated successfully');
       setEditing(false);
-      
+
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Update profile error:', err);
       setError('Unable to update profile');
+    }
+  };
+
+  const handleToggleDarkMode = async () => {
+    const newValue = !darkMode;
+    setDarkMode(newValue); // সাথে সাথে UI-তে থিম বদলানোর জন্য optimistic update
+
+    // AuthContext-এর user object আপডেট করলে পুরো অ্যাপে সাথে সাথে থিম apply হবে
+    setUser((prev) => (prev ? { ...prev, darkMode: newValue } : prev));
+
+    try {
+      await userService.updateUserProfile(user.uid, { darkMode: newValue });
+    } catch (err) {
+      console.error('Update dark mode error:', err);
+      // ব্যর্থ হলে আগের অবস্থায় ফিরিয়ে দেওয়া
+      setDarkMode(!newValue);
+      setUser((prev) => (prev ? { ...prev, darkMode: !newValue } : prev));
     }
   };
 
@@ -101,7 +120,7 @@ function SettingsScreen() {
             <User size={20} />
             <span>Profile</span>
           </div>
-          
+
           <div className="settings-profile-preview">
             <Avatar src={profile?.photoURL} name={profile?.displayName} size={64} />
             <div>
@@ -159,10 +178,32 @@ function SettingsScreen() {
 
         <div className="settings-section">
           <div className="settings-section-header">
+            <Moon size={20} />
+            <span>Appearance</span>
+          </div>
+
+          <div className="settings-item">
+            <div className="settings-item-info">
+              <Moon size={18} />
+              <span>Dark Mode</span>
+            </div>
+            <label className="settings-toggle-switch">
+              <input
+                type="checkbox"
+                checked={darkMode}
+                onChange={handleToggleDarkMode}
+              />
+              <span className="settings-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-header">
             <Shield size={20} />
             <span>Privacy</span>
           </div>
-          
+
           <div className="settings-item">
             <div className="settings-item-info">
               <Users size={18} />
