@@ -15,6 +15,7 @@ export const userService = {
       usernameNormalized: data.username ? data.username.toLowerCase() : '',
       bio: data.bio || '',
       photoURL: data.photoURL || '',
+      darkMode: false,
       createdAt: FirebaseService.getTimestamp(),
       lastSeen: FirebaseService.getTimestamp(),
       online: false,
@@ -35,6 +36,7 @@ export const userService = {
     if (data.displayName !== undefined) updates.displayName = data.displayName;
     if (data.bio !== undefined) updates.bio = data.bio;
     if (data.photoURL !== undefined) updates.photoURL = data.photoURL;
+    if (data.darkMode !== undefined) updates.darkMode = data.darkMode;
     if (data.username !== undefined) {
       updates.username = data.username;
       updates.usernameNormalized = data.username.toLowerCase();
