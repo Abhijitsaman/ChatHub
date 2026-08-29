@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { userService } from '../services/userService';
@@ -11,58 +11,17 @@ import '../styles/QRScannerScreen.css';
 function QRScannerScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [hasPermission, setHasPermission] = useState(null);
   const [scanning, setScanning] = useState(true);
   const [error, setError] = useState(null);
+  const [cameraError, setCameraError] = useState(null);
   const [scannedData, setScannedData] = useState(null);
   const [scannedUser, setScannedUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
-  const scannerRef = useRef(null);
-
-  useEffect(() => {
-    let permissionStream = null;
-    let cancelled = false;
-
-    // Just checking whether permission exists — release the stream immediately
-    // so the actual QrScanner component below can open its own camera stream
-    // without the camera being reported as "busy".
-    navigator.mediaDevices
-      .getUserMedia({ video: true })
-      .then((stream) => {
-        permissionStream = stream;
-        stream.getTracks().forEach((track) => track.stop());
-        if (!cancelled) setHasPermission(true);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setHasPermission(false);
-          setError('Camera access denied. Please allow camera access in your browser settings.');
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      if (permissionStream) {
-        permissionStream.getTracks().forEach((track) => track.stop());
-      }
-      if (scannerRef.current) {
-        try {
-          const stream = scannerRef.current.getStream();
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-          }
-        } catch (err) {
-          // Ignore cleanup errors
-        }
-        scannerRef.current = null;
-      }
-    };
-  }, []);
 
   const handleScan = async (result) => {
     if (!result || !scanning) return;
-    
+
     setScanning(false);
     setLoading(true);
     setError(null);
@@ -70,7 +29,7 @@ function QRScannerScreen() {
     try {
       const text = result.text;
       let data;
-      
+
       try {
         data = JSON.parse(text);
       } catch {
@@ -108,8 +67,12 @@ function QRScannerScreen() {
 
   const handleError = (err) => {
     console.error('Scanner error:', err);
-    if (!error) {
-      setError('Camera error. Please try again.');
+    if (err?.name === 'NotAllowedError') {
+      setCameraError('Camera access denied. Please allow camera access in your browser settings.');
+    } else if (err?.name === 'NotFoundError') {
+      setCameraError('No camera found on this device.');
+    } else if (!cameraError) {
+      setCameraError('Camera error. Please try again.');
     }
   };
 
@@ -139,7 +102,7 @@ function QRScannerScreen() {
     navigate('/qr');
   };
 
-  if (hasPermission === false) {
+  if (cameraError) {
     return (
       <div className="qr-scanner-screen">
         <div className="qr-scanner-header">
@@ -151,7 +114,7 @@ function QRScannerScreen() {
         <div className="qr-scanner-permission-denied">
           <Camera size={48} />
           <h3>Camera Access Denied</h3>
-          <p>{error}</p>
+          <p>{cameraError}</p>
           <button className="qr-scanner-retry" onClick={() => window.location.reload()}>
             Try Again
           </button>
@@ -212,7 +175,7 @@ function QRScannerScreen() {
           <h3>{scannedUser.displayName}</h3>
           <span className="qr-result-username">@{scannedUser.username}</span>
           {scannedUser.bio && <p className="qr-result-bio">{scannedUser.bio}</p>}
-          
+
           <div className="qr-result-actions">
             <button className="qr-result-action primary" onClick={handleStartChat}>
               <UserPlus size={20} />
@@ -238,7 +201,6 @@ function QRScannerScreen() {
 
       <div className="qr-scanner-container">
         <QrScanner
-          ref={scannerRef}
           onDecode={handleScan}
           onError={handleError}
           constraints={{
@@ -266,7 +228,7 @@ function QRScannerScreen() {
             ),
           }}
         />
-        
+
         <div className="qr-scanner-overlay">
           <div className="qr-scanner-instructions">
             <Camera size={24} />
