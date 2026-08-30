@@ -22,7 +22,6 @@ export const callService = {
   },
 
   async createCall(callerId, calleeId, type) {
-    // Clean up any leftover "calling" documents between these two users first
     await this.endStaleCalls(callerId, calleeId);
 
     const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -79,10 +78,12 @@ export const callService = {
     });
   },
 
-  async addIceCandidate(callId, candidate) {
+  // এখন senderId সহ সেভ হয়, যাতে অন্য পাশ নিজের candidate ফিল্টার করে বাদ দিতে পারে
+  async addIceCandidate(callId, candidate, senderId) {
     const candidatesRef = collection(db, 'calls', callId, 'candidates');
     await addDoc(candidatesRef, {
       candidate: JSON.stringify(candidate),
+      senderId,
       timestamp: FirebaseService.getTimestamp(),
     });
   },
@@ -99,10 +100,13 @@ export const callService = {
     });
   },
 
-  listenCandidates(callId, callback) {
+  // currentUserId নিজের পাঠানো candidate বাদ দিয়ে শুধু প্রতিপক্ষেরটা ফেরত দেয়
+  listenCandidates(callId, currentUserId, callback) {
     const candidatesRef = collection(db, 'calls', callId, 'candidates');
     return onSnapshot(candidatesRef, (snapshot) => {
-      const candidateList = snapshot.docs.map(d => JSON.parse(d.data().candidate));
+      const candidateList = snapshot.docs
+        .filter((d) => d.data().senderId !== currentUserId)
+        .map((d) => ({ id: d.id, candidate: JSON.parse(d.data().candidate) }));
       callback(candidateList);
     });
   },
@@ -130,10 +134,6 @@ export const callService = {
         if (isFresh) {
           freshCalls.push(call);
         } else {
-          // Old / phantom call doc (created before this fix, or genuinely stale
-          // because nobody answered/rejected it in time).
-          // Self-heal: mark it ended so it stops showing up forever, instead
-          // of requiring a manual delete in the Firestore console.
           updateDoc(d.ref, {
             status: 'ended',
             endedAt: FirebaseService.getTimestamp(),
