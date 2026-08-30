@@ -18,7 +18,7 @@ function CallScreen() {
   const { calleeId, type, callerId, callId: stateCallId } = location.state || {};
 
   const [callId, setCallId] = useState(stateCallId || null);
-  const [callee, setCallee] = useState(null);
+  const [otherUser, setOtherUser] = useState(null);
   const [status, setStatus] = useState('connecting');
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -32,6 +32,8 @@ function CallScreen() {
   const initializedRef = useRef(false);
 
   const isCaller = callerId === user?.uid;
+  // অপর পক্ষের সঠিক uid — caller হলে অপর পক্ষ হলো callee, callee হলে অপর পক্ষ caller
+  const otherUserId = isCaller ? calleeId : callerId;
 
   useEffect(() => {
     if (!user || !calleeId) {
@@ -47,8 +49,8 @@ function CallScreen() {
 
     const initializeCall = async () => {
       try {
-        const profile = await userService.getUserProfile(calleeId);
-        setCallee(profile);
+        const profile = await userService.getUserProfile(otherUserId);
+        setOtherUser(profile);
 
         const webrtc = new WebRTCService();
         webrtcRef.current = webrtc;
@@ -202,7 +204,7 @@ function CallScreen() {
           <ArrowLeft size={24} />
         </button>
         <div className="call-header-info">
-          <span className="call-header-name">{callee?.displayName || 'User'}</span>
+          <span className="call-header-name">{otherUser?.displayName || 'User'}</span>
           <span className="call-header-status">
             {status === 'connected' ? formatDuration(duration) :
              status === 'calling' ? 'Calling...' :
@@ -219,7 +221,7 @@ function CallScreen() {
           </>
         ) : (
           <div className="call-audio-avatar">
-            <Avatar src={callee?.photoURL} name={callee?.displayName} size={120} />
+            <Avatar src={otherUser?.photoURL} name={otherUser?.displayName} size={120} />
           </div>
         )}
       </div>
