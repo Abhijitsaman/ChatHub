@@ -10,7 +10,12 @@ export class WebRTCService {
     this.onRemoteStream = null;
     this.onIceConnectionStateChange = null;
     this.onTrack = null;
-    
+
+    this.userId = null;
+    this.processedCandidateIds = new Set();
+    this.pendingCandidates = [];
+    this.remoteDescriptionSet = false;
+
     this.configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -23,9 +28,9 @@ export class WebRTCService {
     if (this.peerConnection) {
       this.peerConnection.close();
     }
-    
+
     this.peerConnection = new RTCPeerConnection(this.configuration);
-    
+
     this.peerConnection.oniceconnectionstatechange = () => {
       if (this.onIceConnectionStateChange) {
         this.onIceConnectionStateChange(this.peerConnection.iceConnectionState);
@@ -66,7 +71,7 @@ export class WebRTCService {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       this.localStream = stream;
-      
+
       if (this.onLocalStream) {
         this.onLocalStream(stream);
       }
@@ -74,8 +79,7 @@ export class WebRTCService {
       return stream;
     } catch (error) {
       console.error('Get media error:', error);
-      
-      // Try with audio only if video fails
+
       if (includeVideo && error.name !== 'NotAllowedError') {
         try {
           const audioOnly = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -88,24 +92,56 @@ export class WebRTCService {
           throw audioError;
         }
       }
-      
+
       throw error;
     }
   }
 
-  async initiateCall(callId, includeVideo = true) {
+  // নতুন candidate আসলে: remote description সেট থাকলে সাথে সাথে যোগ হবে,
+  // না থাকলে পরে remote description সেট হওয়ার জন্য জমা (queue) থাকবে।
+  // duplicate candidate যাতে বারবার যোগ না হয় তার জন্য id ট্র্যাক করা হচ্ছে।
+  async _handleIncomingCandidates(items) {
+    for (const item of items) {
+      if (this.processedCandidateIds.has(item.id)) continue;
+      this.processedCandidateIds.add(item.id);
+
+      if (this.remoteDescriptionSet && this.peerConnection) {
+        try {
+          await this.peerConnection.addIceCandidate(new RTCIceCandidate(item.candidate));
+        } catch (err) {
+          console.warn('Add candidate error:', err);
+        }
+      } else {
+        this.pendingCandidates.push(item.candidate);
+      }
+    }
+  }
+
+  async _flushPendingCandidates() {
+    this.remoteDescriptionSet = true;
+    const toAdd = this.pendingCandidates;
+    this.pendingCandidates = [];
+    for (const candidate of toAdd) {
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn('Add candidate error:', err);
+      }
+    }
+  }
+
+  async initiateCall(callId, includeVideo = true, userId) {
     try {
+      this.userId = userId;
       await this.getLocalStream(includeVideo);
       await this.initPeerConnection();
 
       const offer = await this.peerConnection.createOffer();
       await this.peerConnection.setLocalDescription(offer);
 
-      // Send offer via signaling
       const { callService } = await import('./callService');
       await callService.setOffer(callId, offer);
 
-      // Listen for answer
       const unsubscribe = callService.listenCall(callId, async (callData) => {
         if (callData?.answer && !this.answered) {
           const answer = JSON.parse(callData.answer);
@@ -113,26 +149,19 @@ export class WebRTCService {
             new RTCSessionDescription(answer)
           );
           this.answered = true;
+          await this._flushPendingCandidates();
         }
       });
 
-      // Listen for ICE candidates
-      callService.listenCandidates(callId, async (candidates) => {
-        for (const candidate of candidates) {
-          try {
-            await this.peerConnection.addIceCandidate(
-              new RTCIceCandidate(candidate)
-            );
-          } catch (err) {
-            console.warn('Add candidate error:', err);
-          }
-        }
+      // শুধু প্রতিপক্ষের candidate শোনা হচ্ছে (নিজের uid বাদ দিয়ে)
+      callService.listenCandidates(callId, this.userId, (items) => {
+        this._handleIncomingCandidates(items);
       });
 
-      // Send local ICE candidates
+      // নিজের candidate পাঠানো হচ্ছে, নিজের userId সহ ট্যাগ করে
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-          callService.addIceCandidate(callId, event.candidate);
+          callService.addIceCandidate(callId, event.candidate, this.userId);
         }
       };
 
@@ -143,14 +172,16 @@ export class WebRTCService {
     }
   }
 
-  async handleOffer(callId, offer) {
+  async handleOffer(callId, offer, userId) {
     try {
+      this.userId = userId;
       await this.getLocalStream(true);
       await this.initPeerConnection();
 
       await this.peerConnection.setRemoteDescription(
         new RTCSessionDescription(offer)
       );
+      await this._flushPendingCandidates();
 
       const answer = await this.peerConnection.createAnswer();
       await this.peerConnection.setLocalDescription(answer);
@@ -158,22 +189,13 @@ export class WebRTCService {
       const { callService } = await import('./callService');
       await callService.setAnswer(callId, answer);
 
-      // Listen for ICE candidates
-      callService.listenCandidates(callId, async (candidates) => {
-        for (const candidate of candidates) {
-          try {
-            await this.peerConnection.addIceCandidate(
-              new RTCIceCandidate(candidate)
-            );
-          } catch (err) {
-            console.warn('Add candidate error:', err);
-          }
-        }
+      callService.listenCandidates(callId, this.userId, (items) => {
+        this._handleIncomingCandidates(items);
       });
 
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-          callService.addIceCandidate(callId, event.candidate);
+          callService.addIceCandidate(callId, event.candidate, this.userId);
         }
       };
 
@@ -214,5 +236,8 @@ export class WebRTCService {
       this.remoteStream = null;
     }
     this.answered = false;
+    this.processedCandidateIds = new Set();
+    this.pendingCandidates = [];
+    this.remoteDescriptionSet = false;
   }
 }
