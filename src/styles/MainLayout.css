@@ -155,6 +155,7 @@
     display: none;
   }
 }
+
 .incoming-call-overlay {
   position: fixed;
   inset: 0;
