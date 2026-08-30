@@ -39,7 +39,6 @@ function CallScreen() {
       return;
     }
 
-    // Guard against double-initialization (e.g. React StrictMode / re-renders)
     if (initializedRef.current) return;
     initializedRef.current = true;
 
@@ -78,13 +77,11 @@ function CallScreen() {
         };
 
         if (isCaller) {
-          // Caller creates a fresh call document
           const newCallId = await callService.createCall(user.uid, calleeId, type);
           setCallId(newCallId);
 
-          await webrtc.initiateCall(newCallId, type === 'video');
+          await webrtc.initiateCall(newCallId, type === 'video', user.uid);
 
-          // Watch for status changes (rejected/ended by other side)
           unsubscribeCall = callService.listenCall(newCallId, (callData) => {
             if (callData?.status === 'rejected') {
               setError('Call declined');
@@ -97,7 +94,6 @@ function CallScreen() {
 
           setStatus('calling');
         } else {
-          // Callee: we already have the real callId (from the incoming-call listener)
           if (!stateCallId) {
             throw new Error('Call information missing');
           }
@@ -108,7 +104,8 @@ function CallScreen() {
           }
 
           if (existingCall.offer) {
-            await webrtc.handleOffer(stateCallId, JSON.parse(existingCall.offer));
+            await webrtc.handleOffer(stateCallId, JSON.parse(existingCall.offer), user.uid);
+            await callService.acceptCall(stateCallId);
           }
 
           unsubscribeCall = callService.listenCall(stateCallId, async (callData) => {
@@ -116,7 +113,8 @@ function CallScreen() {
               navigate('/chats');
             }
             if (callData?.offer && !webrtc.answered) {
-              await webrtc.handleOffer(stateCallId, JSON.parse(callData.offer));
+              await webrtc.handleOffer(stateCallId, JSON.parse(callData.offer), user.uid);
+              await callService.acceptCall(stateCallId);
             }
           });
 
