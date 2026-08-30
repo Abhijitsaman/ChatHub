@@ -32,7 +32,6 @@ function CallScreen() {
   const initializedRef = useRef(false);
 
   const isCaller = callerId === user?.uid;
-  // অপর পক্ষের সঠিক uid — caller হলে অপর পক্ষ হলো callee, callee হলে অপর পক্ষ caller
   const otherUserId = isCaller ? calleeId : callerId;
 
   useEffect(() => {
@@ -214,12 +213,21 @@ function CallScreen() {
       </div>
 
       <div className="call-video-container">
-        {type === 'video' ? (
-          <>
-            <video ref={remoteVideoRef} className="call-remote-video" autoPlay playsInline />
-            <video ref={localVideoRef} className="call-local-video" autoPlay playsInline muted />
-          </>
-        ) : (
+        {/* এই video element-টা ভয়েস কলেও সবসময় DOM-এ থাকে (শুধু ভিজ্যুয়ালি
+            লুকানো), যাতে remote audio track ঠিকভাবে বাজে। display:none দিলে
+            কিছু ব্রাউজারে audio বন্ধ হয়ে যায়, তাই opacity/size দিয়ে লুকানো হচ্ছে। */}
+        <video
+          ref={remoteVideoRef}
+          className={type === 'video' ? 'call-remote-video' : 'call-remote-audio-only'}
+          autoPlay
+          playsInline
+        />
+
+        {type === 'video' && (
+          <video ref={localVideoRef} className="call-local-video" autoPlay playsInline muted />
+        )}
+
+        {type !== 'video' && (
           <div className="call-audio-avatar">
             <Avatar src={otherUser?.photoURL} name={otherUser?.displayName} size={120} />
           </div>
