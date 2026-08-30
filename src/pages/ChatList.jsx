@@ -43,17 +43,45 @@ function ChatList() {
     };
   }, [user, loadConversations, setConversations]);
 
+  const toJsDate = (timestamp) => {
+    if (!timestamp) return null;
+    const date = typeof timestamp.toDate === 'function'
+      ? timestamp.toDate()
+      : new Date(timestamp);
+    return isNaN(date.getTime()) ? null : date;
+  };
+
+  const isSameDay = (d1, d2) =>
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+
   const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
+    const date = toJsDate(timestamp);
+    if (!date) return '';
+
     const now = new Date();
-    const diff = now - date;
-    
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-    if (diff < 172800000) return 'Yesterday';
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    // আজকের মেসেজ হলে সময় দেখাবে
+    if (isSameDay(date, now)) {
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+
+    // গতকালের মেসেজ হলে "Yesterday"
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (isSameDay(date, yesterday)) {
+      return 'Yesterday';
+    }
+
+    // তার আগের হলে DD/MM/YYYY ফরম্যাটে তারিখ
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const handleChatClick = (conversationId, otherUserId) => {
@@ -93,7 +121,7 @@ function ChatList() {
       <div className="chatlist-header">
         <h1>Chats</h1>
       </div>
-      
+
       {conversations.length === 0 ? (
         <div className="chatlist-empty">
           <MessageCircle size={48} />
